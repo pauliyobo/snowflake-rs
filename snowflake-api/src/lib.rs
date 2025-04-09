@@ -32,11 +32,12 @@ use session::{AuthError, Session};
 
 use crate::connection::QueryType;
 use crate::connection::{Connection, ConnectionError};
-use crate::requests::ExecRequest;
+use crate::requests::{ExecRequest, ExecRequestBuilder};
 use crate::responses::{ExecResponseRowType, SnowflakeType};
 use crate::session::AuthError::MissingEnvArgument;
 
 pub mod connection;
+mod converter;
 #[cfg(feature = "polars")]
 mod polars;
 mod put;
@@ -207,7 +208,7 @@ impl AuthArgs {
         Ok(AuthArgs {
             account_identifier: std::env::var("SNOWFLAKE_ACCOUNT")
                 .map_err(|_| MissingEnvArgument("SNOWFLAKE_ACCOUNT".to_owned()))?,
-            warehouse: std::env::var("SNOWLFLAKE_WAREHOUSE").ok(),
+            warehouse: std::env::var("SNOWFLAKE_WAREHOUSE").ok(),
             database: std::env::var("SNOWFLAKE_DATABASE").ok(),
             schema: std::env::var("SNOWFLAKE_SCHEMA").ok(),
             username: std::env::var("SNOWFLAKE_USER")
@@ -376,10 +377,21 @@ impl SnowflakeApi {
         Ok(())
     }
 
+    /// prepares an ExecRequest
+    /// In practice this just returns an ExecRequestBuilder with the sequence_id set
+    pub async fn prepare(&self, sql_text: &str) -> Result<ExecRequestBuilder, SnowflakeApiError> {
+        Ok(ExecRequestBuilder::new(sql_text))
+    }
+    
     /// Execute a single query against API.
     /// If statement is PUT, then file will be uploaded to the Snowflake-managed storage
     pub async fn exec(&self, sql: &str) -> Result<QueryResult, SnowflakeApiError> {
-        let raw = self.exec_raw(sql).await?;
+        let req = self.prepare(sql).await?.build();
+        Ok(self.exec_request(req).await?)
+    }
+    
+    pub async fn exec_request(&self, req: ExecRequest) -> Result<QueryResult, SnowflakeApiError> {    
+        let raw = self.exec_raw(req).await?;
         let res = raw.deserialize_arrow()?;
         Ok(res)
     }
@@ -387,21 +399,21 @@ impl SnowflakeApi {
     /// Executes a single query against API.
     /// If statement is PUT, then file will be uploaded to the Snowflake-managed storage
     /// Returns raw bytes in the Arrow response
-    pub async fn exec_raw(&self, sql: &str) -> Result<RawQueryResult, SnowflakeApiError> {
+    pub async fn exec_raw(&self, req: ExecRequest) -> Result<RawQueryResult, SnowflakeApiError> {
         let put_re = Regex::new(r"(?i)^(?:/\*.*\*/\s*)*put\s+").unwrap();
 
         // put commands go through a different flow and result is side-effect
-        if put_re.is_match(sql) {
+        if put_re.is_match(&req.sql_text) {
             log::info!("Detected PUT query");
-            self.exec_put(sql).await.map(|()| RawQueryResult::Empty)
+            self.exec_put(req).await.map(|()| RawQueryResult::Empty)
         } else {
-            self.exec_arrow_raw(sql).await
+            self.exec_arrow_raw(req).await
         }
     }
 
-    async fn exec_put(&self, sql: &str) -> Result<(), SnowflakeApiError> {
+    async fn exec_put(&self, req: ExecRequest) -> Result<(), SnowflakeApiError> {
         let resp = self
-            .run_sql::<ExecResponse>(sql, QueryType::JsonQuery)
+            .run_sql::<ExecResponse>(req, QueryType::JsonQuery)
             .await?;
         log::debug!("Got PUT response: {:?}", resp);
 
@@ -412,26 +424,36 @@ impl SnowflakeApi {
                 e.data.error_code,
                 e.message.unwrap_or_default(),
             )),
+
         }
     }
 
     /// Useful for debugging to get the straight query response
     #[cfg(debug_assertions)]
     pub async fn exec_response(&mut self, sql: &str) -> Result<ExecResponse, SnowflakeApiError> {
-        self.run_sql::<ExecResponse>(sql, QueryType::ArrowQuery)
+        let req = self.prepare(sql).await?.build();
+        self.run_sql::<ExecResponse>(req, QueryType::ArrowQuery)
             .await
     }
 
     /// Useful for debugging to get raw JSON response
     #[cfg(debug_assertions)]
     pub async fn exec_json(&mut self, sql: &str) -> Result<serde_json::Value, SnowflakeApiError> {
-        self.run_sql::<serde_json::Value>(sql, QueryType::JsonQuery)
+        let req = self.prepare(sql).await?.build();
+        self.run_sql::<serde_json::Value>(req, QueryType::JsonQuery)
             .await
     }
 
-    async fn exec_arrow_raw(&self, sql: &str) -> Result<RawQueryResult, SnowflakeApiError> {
+    #[cfg(debug_assertions)]
+    pub async fn exec_json_request(&mut self, req: ExecRequest) -> Result<serde_json::Value, SnowflakeApiError> {
+        self.run_sql::<serde_json::Value>(req, QueryType::JsonQuery)
+            .await
+    }
+
+
+    async fn exec_arrow_raw(&self, req: ExecRequest) -> Result<RawQueryResult, SnowflakeApiError> {
         let resp = self
-            .run_sql::<ExecResponse>(sql, QueryType::ArrowQuery)
+            .run_sql::<ExecResponse>(req, QueryType::ArrowQuery)
             .await?;
         log::debug!("Got query response: {:?}", resp);
 
@@ -483,20 +505,13 @@ impl SnowflakeApi {
 
     async fn run_sql<R: serde::de::DeserializeOwned>(
         &self,
-        sql_text: &str,
+        req: ExecRequest,
         query_type: QueryType,
     ) -> Result<R, SnowflakeApiError> {
-        log::debug!("Executing: {}", sql_text);
-
         let parts = self.session.get_token().await?;
-
-        let body = ExecRequest {
-            sql_text: sql_text.to_string(),
-            async_exec: false,
-            sequence_id: parts.sequence_id,
-            is_internal: false,
-        };
-
+        let mut req = req;
+        req.sequence_id = parts.sequence_id;
+        log::debug!("Executing: {}", &req.sql_text);
         let resp = self
             .connection
             .request::<R>(
@@ -504,10 +519,9 @@ impl SnowflakeApi {
                 &self.account_identifier,
                 &[],
                 Some(&parts.session_token_auth_header),
-                body,
+                req,
             )
             .await?;
-
         Ok(resp)
     }
 }

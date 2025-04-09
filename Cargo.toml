@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "jwt",
     "snowflake-api",
+    "snowflake-api/examples/binding_statements",
     "snowflake-api/examples/tracing",
     "snowflake-api/examples/polars",
 ]
