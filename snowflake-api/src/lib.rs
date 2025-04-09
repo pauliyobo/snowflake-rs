@@ -207,7 +207,7 @@ impl AuthArgs {
         Ok(AuthArgs {
             account_identifier: std::env::var("SNOWFLAKE_ACCOUNT")
                 .map_err(|_| MissingEnvArgument("SNOWFLAKE_ACCOUNT".to_owned()))?,
-            warehouse: std::env::var("SNOWLFLAKE_WAREHOUSE").ok(),
+            warehouse: std::env::var("SNOWFLAKE_WAREHOUSE").ok(),
             database: std::env::var("SNOWFLAKE_DATABASE").ok(),
             schema: std::env::var("SNOWFLAKE_SCHEMA").ok(),
             username: std::env::var("SNOWFLAKE_USER")
