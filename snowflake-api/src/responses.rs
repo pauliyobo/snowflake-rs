@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Deserialize, Debug)]
@@ -178,8 +178,8 @@ pub struct ExecResponseRowType {
 }
 
 // fixme: is it good idea to keep this as an enum if more types could be added in future?
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Deserialize, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all(deserialize = "snake_case", serialize = "UPPERCASE"))]
 pub enum SnowflakeType {
     Fixed,
     Real,

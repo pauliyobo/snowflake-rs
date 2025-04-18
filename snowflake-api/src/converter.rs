@@ -1,21 +1,22 @@
 //! Converter between rust types and snowflake types during query execution
 
 use serde::{Serialize, Deserialize};
+use crate::responses::SnowflakeType;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SnowflakeType {
+pub struct SnowflakeBindingType {
     #[serde(rename = "type")]
-    pub kind: String,
+    pub kind: SnowflakeType,
     pub value: String,
 }
 
 /// a trait to represent a SnowflakeType conversion/// You could use it to convert your own custom types to snowflake values
 pub trait ToSnowflakeType {
-    fn to_snowflake(&self) -> SnowflakeType;
+    fn to_snowflake(&self) -> SnowflakeBindingType;
 }
 
 
-impl<T> From<T> for SnowflakeType
+impl<T> From<T> for SnowflakeBindingType
 where
     T: ToSnowflakeType
 {
@@ -25,11 +26,11 @@ where
 }
 
 macro_rules! simple_impl {
-    ($v:ty, $target:literal) => {
+    ($v:ty, $target:expr) => {
         impl ToSnowflakeType for $v {
-            fn to_snowflake(&self) -> SnowflakeType {
-                SnowflakeType {
-                    kind: $target.to_string(),
+            fn to_snowflake(&self) -> SnowflakeBindingType {
+                SnowflakeBindingType {
+                    kind: $target,
                     value: self.to_string(),
                 }
             }
@@ -38,16 +39,16 @@ macro_rules! simple_impl {
     };
 }
 
-simple_impl!(i16, "NUMBER");
-simple_impl!(i32, "NUMBER");
-simple_impl!(i64, "NUMBER");
-simple_impl!(u16, "NUMBER");
-simple_impl!(u32, "NUMBER");
-simple_impl!(u64, "NUMBER");
-simple_impl!(f32, "FLOAT");
-simple_impl!(f64, "FLOAT");
-simple_impl!(String, "TEXT");
-simple_impl!(&str, "TEXT");
+simple_impl!(i16, SnowflakeType::Fixed);
+simple_impl!(i32, SnowflakeType::Fixed);
+simple_impl!(i64, SnowflakeType::Fixed);
+simple_impl!(u16, SnowflakeType::Fixed);
+simple_impl!(u32, SnowflakeType::Fixed);
+simple_impl!(u64, SnowflakeType::Fixed);
+simple_impl!(f32, SnowflakeType::Real);
+simple_impl!(f64, SnowflakeType::Real);
+simple_impl!(String, SnowflakeType::Text);
+simple_impl!(&str, SnowflakeType::Text);
 
 
 #[cfg(test)]
@@ -56,8 +57,8 @@ mod tests {
 
     #[test]
     fn test_simple_impl() {
-        let sf = SnowflakeType::from("test");
-        assert_eq!(sf.kind, "TEXT".to_string());
+        let sf = SnowflakeBindingType::from("test");
+        assert_eq!(sf.kind, SnowflakeType::Text);
         assert_eq!(sf.value, String::from("3"))
     }
 

@@ -1,4 +1,4 @@
-use crate::converter::{SnowflakeType, ToSnowflakeType};
+use crate::converter::{SnowflakeBindingType, ToSnowflakeType};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -9,13 +9,13 @@ pub struct ExecRequest {
     pub async_exec: bool,
     pub sequence_id: u64,
     pub is_internal: bool,
-    pub bindings: HashMap<String, SnowflakeType>,
+    pub bindings: HashMap<String, SnowflakeBindingType>,
 }
 
 #[derive(Default)]
 pub struct ExecRequestBuilder {
     sql_text: String,
-    bindings: Vec<SnowflakeType>,
+    bindings: Vec<SnowflakeBindingType>,
     is_internal: bool,
     sequence_id: u64,
     async_exec: bool,
