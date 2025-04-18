@@ -280,13 +280,7 @@ impl Session {
     fn cert_request_body(&self) -> Result<CertLoginRequest, AuthError> {
         // we want to strip region information from the account identifier
         // See: https://docs.snowflake.com/en/developer-guide/snowflake-rest-api/authentication#label-sfrest-api-jwt-token
-        let account = {
-            if self.account_identifier.contains(".global") {
-                self.account_identifier.split_once("-").unwrap().0
-            } else {
-                self.account_identifier.split_once(".").unwrap().0
-            }
-        };
+        let account = self.account_identifier.split_once(".").unwrap().0;
         let full_identifier = format!("{}.{}", &account, &self.username);
         let private_key_pem = self
             .private_key_pem
