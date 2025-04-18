@@ -415,7 +415,7 @@ impl SnowflakeApi {
         let resp = self
             .run_sql::<ExecResponse>(req, QueryType::JsonQuery)
             .await?;
-        log::debug!("Got PUT response: {:?}", resp);
+        log::debug!("Got PUT response: {resp:?}");
 
         match resp {
             ExecResponse::Query(_) => Err(SnowflakeApiError::UnexpectedResponse),
@@ -455,7 +455,7 @@ impl SnowflakeApi {
         let resp = self
             .run_sql::<ExecResponse>(req, QueryType::ArrowQuery)
             .await?;
-        log::debug!("Got query response: {:?}", resp);
+        log::debug!("Got query response: {resp:?}");
 
         let resp = match resp {
             // processable response
